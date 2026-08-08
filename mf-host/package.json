@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "rsbuild dev",
     "build": "rsbuild build",
-    "build:dev": "MF_STATIC_BUILD=true rsbuild build --mode development",
+    "build:dev": "rsbuild build --mode development",
     "preview": "rsbuild preview"
   },
   "dependencies": {

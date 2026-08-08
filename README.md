@@ -185,8 +185,6 @@ Fast Refresh работает только с development-сборкой `react-
 Отсюда два режима сборки хоста:
 
 - `npm run build:dev` — development-сборка для раздачи из `mf-bus` рядом с
-  dev-серверами remote. Fast Refresh в самом хосте выключен
-  (`MF_STATIC_BUILD=true`): dev-сервера у хоста нет, и без него вызовы
-  `$RefreshReg$` остались бы без рантайма.
+  dev-серверами remote.
 - `npm run build` — обычная production-сборка, работает с production-сборками
   remote.

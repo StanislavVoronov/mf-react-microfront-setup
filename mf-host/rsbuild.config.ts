@@ -4,14 +4,9 @@ import { pluginModuleFederation } from '@module-federation/rsbuild-plugin';
 
 const PORT = 5002;
 
-// Сборка под раздачу из mf-bus (npm run build:dev). Dev-сервера при этом нет,
-// поэтому Fast Refresh в самом хосте не нужен — иначе в бандл попадут вызовы
-// $RefreshReg$ без рантайма, который их определяет.
-const STATIC_BUILD = process.env.MF_STATIC_BUILD === 'true';
-
 export default defineConfig({
   plugins: [
-    pluginReact({ fastRefresh: !STATIC_BUILD }),
+    pluginReact(),
     pluginModuleFederation({
       name: 'mf_host',
       // remotes здесь не объявляем: контейнеры регистрируются в рантайме,
