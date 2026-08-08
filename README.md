@@ -1,64 +1,54 @@
-# mf-new
+# mf-react-microfront-setup
 
-Четыре независимые папки (у каждой свой `package.json` и `node_modules`):
+Module Federation 2.0 + Rsbuild + React. Пять независимых папок, у каждой свой
+`package.json` и `node_modules`.
 
-| Папка         | Что это                                                           | Порт |
-| ------------- | ----------------------------------------------------------------- | ---- |
-| `mf-remote`   | MF 2.0 remote на Rsbuild + React; сам является host для `mf-remote-1` | 5001 |
-| `mf-host`     | Host на Rsbuild + React, `createRoot`, автогенерация `index.html`  | 5002 |
-| `mf-bus`      | Обычный express-сервер: раздаёт сборку `mf-host` и проксирует remote | 5003 |
-| `mf-remote-1` | Вложенный MF 2.0 remote, его грузит `mf-remote`                    | 5004 |
+| Папка         | Что это                                                        | Порт |
+| ------------- | -------------------------------------------------------------- | ---- |
+| `mf-remote`   | MF 2.0 remote; сам является host для `mf-remote-1`              | 5001 |
+| `mf-host`     | Host, `createRoot`, автогенерация `index.html`                  | 5002 |
+| `mf-bus`      | express: раздаёт сборку `mf-host` и проксирует remote           | 5003 |
+| `mf-remote-1` | Вложенный remote, его грузит `mf-remote`                        | 5004 |
+| `mf-remote-2` | Remote с TanStack Query и прогнозом погоды по 10 городам        | 5005 |
 
-Порты зашиты в конфиги, `strictPort: true` — молча съехать на соседний они не могут.
-
-Цепочка вложенная:
+Порты зашиты в конфиги, `strictPort: true` — молча съехать на соседний нельзя.
 
 ```
-mf-host  →  mf-remote  →  mf-remote-1
+mf-host
+  ├── mf-remote        →  mf-remote-1
+  └── mf-remote-2
 ```
 
 ## Установка
 
 ```bash
-cd mf-remote   && npm install
-cd ../mf-remote-1 && npm install
-cd ../mf-host  && npm install
-cd ../mf-bus   && npm install
+for d in mf-remote mf-remote-1 mf-remote-2 mf-host mf-bus; do (cd $d && npm install); done
 ```
 
 ## Сценарий 1: разработка remote, хост раздаётся из mf-bus
 
-`mf-bus` отдаёт **собранный** `mf-host`, а правки в любом из remote прилетают
-на страницу без перезагрузки.
+`mf-bus` отдаёт **собранный** `mf-host`, а правки в любом remote прилетают на
+страницу без перезагрузки.
 
 ```bash
-# терминал 1
-cd mf-remote && npm run dev
-
-# терминал 2
-cd mf-remote-1 && npm run dev
-
-# терминал 3 — собрать хост и поднять раздачу
-cd mf-bus && npm run dev
+cd mf-remote   && npm run dev   # терминал 1
+cd mf-remote-1 && npm run dev   # терминал 2
+cd mf-remote-2 && npm run dev   # терминал 3
+cd mf-bus      && npm run dev   # терминал 4: собрать хост и поднять раздачу
 ```
 
-Открыть <http://localhost:5003>, поправить `mf-remote/src/App.tsx` или
-`mf-remote-1/src/Widget.tsx` — блок меняется, счётчики не сбрасываются.
-
-Пересобирать хост нужно только при правках самого хоста.
+Открыть <http://localhost:5003>. Пересобирать хост нужно только при правках
+самого хоста.
 
 ## Сценарий 2: обычная разработка хоста
 
-```bash
-cd mf-remote   && npm run dev   # 5001
-cd mf-remote-1 && npm run dev   # 5004
-cd mf-host     && npm run dev   # 5002
-```
+Всё то же самое, но вместо `mf-bus` — `cd mf-host && npm run dev` на 5002.
 
 ## Сценарий 3: production
 
 ```bash
 cd mf-remote-1 && npm run build && npm run preview
+cd mf-remote-2 && npm run build && npm run preview
 cd mf-remote   && npm run build && npm run preview
 cd mf-host     && npm run build
 cd mf-bus      && npm start
@@ -68,44 +58,51 @@ cd mf-bus      && npm start
 
 ### Remote — не приложения
 
-У `mf-remote` и `mf-remote-1` нет `index.html` (`tools.htmlPlugin: false`) и нет
-`createRoot`. `src/index.ts` — пустой технический entry для сборщика. Наружу
-торчит только то, что перечислено в `exposes`. По корню их порта отдаётся 404 —
-это контейнеры, а не страницы.
+У `mf-remote`, `mf-remote-1` и `mf-remote-2` нет `index.html`
+(`tools.htmlPlugin: false`) и нет `createRoot`. `src/index.ts` — пустой
+технический entry для сборщика. Наружу торчит только то, что перечислено
+в `exposes`. По корню их порта отдаётся 404 — это контейнеры, а не страницы.
+
+### Один remote — один модуль-загрузчик и один компонент
+
+```
+mf-host/src/remotes/
+  mfRemote.ts            registerRemotes + loadApp
+  mfRemote2.ts           registerRemotes + loadWeather
+  MfRemoteApp.tsx        компонент: lazy + Suspense + RemoteBoundary
+  MfRemote2Weather.tsx   компонент
+```
+
+Загрузчики лежат в `.ts` **без React-импортов** — их тянет точка входа,
+а любой синхронный shared-модуль в entry ломает Module Federation.
+`lazy()` живёт внутри компонента через ленивый инициализатор `useState`:
+голый `const` в теле пересоздавал бы компонент на каждом рендере и
+перемонтировал remote.
 
 ### Адресов remote в коде нет — только прокси
 
-В коде хоста и remote лежат относительные пути:
-
-```ts
-// mf-host/src/remote.ts
-export const REMOTE_ENTRY = '/mf-remote/mf-manifest.json';
-
-// mf-remote/src/remote1.ts
-export const REMOTE_1_ENTRY = '/mf-remote-1/mf-manifest.json';
-```
-
-Реальные адреса живут в двух местах — в `server.proxy` у dev-сервера
-`mf-host` и в `REMOTES` у [mf-bus/server.js](mf-bus/server.js). Каждый remote
-отдаёт себя под тем же префиксом (`server.base` в его конфиге), поэтому прокси
-работает без `pathRewrite`.
+В коде лежат относительные пути (`/mf-remote/mf-manifest.json`). Реальные адреса
+живут в двух местах: `server.proxy` у dev-сервера `mf-host` и `REMOTES`
+в [mf-bus/server.js](mf-bus/server.js). Каждый remote отдаёт себя под тем же
+префиксом (`server.base` в его конфиге), поэтому прокси работает без
+`pathRewrite`.
 
 Регистрация контейнеров — в рантайме, `remotes` в конфигах пустые:
 
 ```ts
-registerRemotes([{ name: REMOTE_NAME, entry: REMOTE_ENTRY }]);
-const module = await loadRemote(`${REMOTE_NAME}/App`);
+registerRemotes([{ name: NAME, entry: ENTRY }]);
+const module = await loadRemote(`${NAME}/App`);
 ```
 
 ### HMR-сокеты идут напрямую на dev-серверы remote
 
-Через прокси ходят только HTTP-запросы (манифест, чанки, hot-update). Сокет
-HMR браузер открывает прямо на `ws://localhost:5001` / `ws://localhost:5004`:
-`dev.client.port` конфигом пустым не оставить — rsbuild подставляет туда порт
-собственного dev-сервера. WebSocket не ограничен CORS, поэтому это работает.
+Через прокси ходят только HTTP-запросы. Сокет HMR браузер открывает прямо на
+`ws://localhost:5001` и далее: `dev.client.port` конфигом пустым не оставить —
+rsbuild подставляет туда порт собственного dev-сервера. WebSocket не ограничен
+CORS, поэтому это работает.
 
-Прокси всё равно подняты с `ws: true` — если понадобится увести и сокеты в
-одну точку входа (remote в docker-сети, за firewall, на https), это делается
+Прокси всё равно подняты с `ws: true`. Если понадобится увести и сокеты в одну
+точку входа (remote в docker-сети, за firewall, на https), это делается
 резолвером `dev.client.webSocketUrlResolver`, который подменяет origin
 на адрес страницы.
 
@@ -115,20 +112,26 @@ react-refresh должен встать в глобальный хук React **�
 зарегистрирует рендерер. Иначе HMR вырождается в перезагрузку страницы. Отсюда
 два места:
 
-- [mf-host/src/index.tsx](mf-host/src/index.tsx) поднимает контейнер `mf-remote`
-  и только потом динамически импортирует `./bootstrap` с `createRoot`.
-  Динамический импорт — ещё и обязательная для Module Federation асинхронная
-  граница: shared-модули резолвятся асинхронно.
-- [mf-remote/src/App.tsx](mf-remote/src/App.tsx) поднимает контейнер
-  `mf-remote-1` через top-level `await`. Хост ждёт этот await, потому что грузит
-  `mf_remote/App` через `loadRemote()` — так вложенный remote успевает
-  инициализироваться до `react-dom`.
+- [mf-host/src/index.tsx](mf-host/src/index.tsx) поднимает контейнеры и только
+  потом динамически импортирует `./bootstrap` с `createRoot`. Динамический
+  импорт — ещё и обязательная для Module Federation асинхронная граница.
+- [mf-remote/src/App.tsx](mf-remote/src/App.tsx) поднимает вложенный контейнер
+  через top-level `await`. Хост ждёт этот await, потому что грузит
+  `mf_remote/App` через `loadRemote()`.
+
+Контейнеры поднимаются **последовательно**, а не через `Promise.all`: при
+параллельной инициализации они гонятся за share scope, и второй remote успевает
+подтянуть собственную копию React вместо общей — падает на
+`Cannot read properties of null (reading 'useState')`.
 
 ### React шарится с префиксом
 
 В `shared` перечислены `react`, `react/`, `react-dom`, `react-dom/`. Слэш на
 конце добавляет к singleton'у `react/jsx-runtime` и `react-dom/client` — без
 этого remote утащит свою копию внутренностей React и сломает хуки.
+
+`mf-remote-2` дополнительно шарит `@tanstack/react-query` и приносит свой
+`QueryClient`: он самодостаточен и не рассчитывает, что провайдер даст хост.
 
 ## Ограничение: dev-remote требует dev-сборки хоста
 
