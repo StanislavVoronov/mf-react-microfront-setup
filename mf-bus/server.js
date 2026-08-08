@@ -3,19 +3,12 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import { REMOTES, hostRemotes } from './remotes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT ?? 5003);
 const HOST_DIST = path.resolve(__dirname, '../mf-host/dist');
-
-// Единственное место, где живут реальные адреса remote. В коде mf-host
-// и mf-remote только относительные пути вида /mf-remote/mf-manifest.json.
-const REMOTES = {
-  '/mf-remote': 'http://localhost:5001',
-  '/mf-remote-1': 'http://localhost:5004',
-  '/mf-remote-2': 'http://localhost:5005',
-};
 
 if (!fs.existsSync(HOST_DIST)) {
   console.error(
@@ -27,9 +20,15 @@ if (!fs.existsSync(HOST_DIST)) {
 
 const app = express();
 
+// Реестр remote для хоста. Хост не знает их заранее — спрашивает здесь.
+app.get('/api/remotes', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(hostRemotes());
+});
+
 // Прокси на remote. Пути не переписываем: каждый remote отдаёт себя
 // под тем же префиксом (server.base в его rsbuild.config.ts).
-const proxies = Object.entries(REMOTES).map(([prefix, target]) =>
+const proxies = REMOTES.map(({ prefix, target }) =>
   createProxyMiddleware({
     pathFilter: `${prefix}/**`,
     target,
@@ -63,9 +62,10 @@ app.get(/.*/, (_req, res) => {
 
 const server = app.listen(PORT, () => {
   console.log(`[mf-bus] Раздаю сборку mf-host: ${HOST_DIST}`);
-  for (const [prefix, target] of Object.entries(REMOTES)) {
+  for (const { prefix, target } of REMOTES) {
     console.log(`[mf-bus] Проксирую ${prefix}/ → ${target}`);
   }
+  console.log(`[mf-bus] Реестр remote: http://localhost:${PORT}/api/remotes`);
   console.log(`[mf-bus] http://localhost:${PORT}`);
 });
 

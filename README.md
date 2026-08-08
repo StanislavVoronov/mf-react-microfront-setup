@@ -63,21 +63,47 @@ cd mf-bus      && npm start
 технический entry для сборщика. Наружу торчит только то, что перечислено
 в `exposes`. По корню их порта отдаётся 404 — это контейнеры, а не страницы.
 
-### Один remote — один модуль-загрузчик и один компонент
+### Хост не знает remote заранее
+
+Список приходит в рантайме из `GET /api/remotes`: в разработке его отдаёт
+dev-сервер `mf-host` через `server.setup`, в проде — `mf-bus`. В коде хоста
+нет ни одного имени контейнера.
+
+```json
+[
+  { "name": "mf_remote",   "entry": "/mf-remote/mf-manifest.json",   "module": "App",     "title": "mf-remote" },
+  { "name": "mf_remote_2", "entry": "/mf-remote-2/mf-manifest.json", "module": "Weather", "title": "Погода" }
+]
+```
+
+Реестр живёт рядом с инфраструктурой — [mf-host/remotes.ts](mf-host/remotes.ts)
+и [mf-bus/remotes.js](mf-bus/remotes.js). Из него же строится прокси, так что
+адрес remote описан ровно один раз. Записи без `module` проксируются, но хосту
+не отдаются: их подключает не он, а другой remote (так `mf-remote` подключает
+`mf-remote-1`).
 
 ```
 mf-host/src/remotes/
-  mfRemote.ts            registerRemotes + loadApp
-  mfRemote2.ts           registerRemotes + loadWeather
-  MfRemoteApp.tsx        компонент: lazy + Suspense + RemoteBoundary
-  MfRemote2Weather.tsx   компонент
+  registry.ts          тип RemoteDescriptor + fetchRemotes()
+  loadRemoteModule.ts  универсальный загрузчик по параметрам
+  RemoteModule.tsx     компонент: lazy + Suspense + RemoteBoundary
 ```
 
-Загрузчики лежат в `.ts` **без React-импортов** — их тянет точка входа,
-а любой синхронный shared-модуль в entry ломает Module Federation.
-`lazy()` живёт внутри компонента через ленивый инициализатор `useState`:
-голый `const` в теле пересоздавал бы компонент на каждом рендере и
-перемонтировал remote.
+Загрузчик ничего не знает про конкретные remote:
+
+```ts
+const Component = lazy(() => loadRemoteModule({ name, entry, module }));
+```
+
+Он регистрирует контейнер один раз на имя и достаёт из него `${name}/${module}`.
+Список в UI тянет TanStack Query — ему принадлежит состояние загрузки, ошибок
+и кнопка «Повторить».
+
+`registry.ts` и `loadRemoteModule.ts` лежат в `.ts` **без React-импортов** — их
+тянет точка входа, а любой синхронный shared-модуль в entry ломает Module
+Federation. `lazy()` живёт внутри компонента через ленивый инициализатор
+`useState`: голый `const` в теле пересоздавал бы компонент на каждом рендере
+и перемонтировал remote.
 
 ### Адресов remote в коде нет — только прокси
 
@@ -112,9 +138,11 @@ react-refresh должен встать в глобальный хук React **�
 зарегистрирует рендерер. Иначе HMR вырождается в перезагрузку страницы. Отсюда
 два места:
 
-- [mf-host/src/index.tsx](mf-host/src/index.tsx) поднимает контейнеры и только
-  потом динамически импортирует `./bootstrap` с `createRoot`. Динамический
-  импорт — ещё и обязательная для Module Federation асинхронная граница.
+- [mf-host/src/index.tsx](mf-host/src/index.tsx) сначала запрашивает реестр
+  обычным `fetch`, поднимает контейнеры и только потом динамически импортирует
+  `./bootstrap` с `createRoot`. Динамический импорт — ещё и обязательная для
+  Module Federation асинхронная граница. В UI список запрашивается ещё раз,
+  уже через TanStack Query: второй запрос уходит в тот же локальный эндпоинт.
 - [mf-remote/src/App.tsx](mf-remote/src/App.tsx) поднимает вложенный контейнер
   через top-level `await`. Хост ждёт этот await, потому что грузит
   `mf_remote/App` через `loadRemote()`.
