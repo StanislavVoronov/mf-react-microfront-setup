@@ -1,14 +1,17 @@
-import { preloadRemotes } from './remotes/loadRemoteModule';
+import { registerRemoteContainers } from './remotes/loadRemoteModule';
 import { fetchRemotes } from './remotes/registry';
 import { queryClient, REMOTES_QUERY_KEY } from './queryClient';
 
-// Список remote заранее неизвестен — спрашиваем его у сервера, а уже потом
-// поднимаем контейнеры. Всё это до react-dom: в dev-сборке внутри контейнера
-// едет собственный рантайм remote (react-refresh и HMR-клиент), он должен
-// встать в глобальный хук раньше, чем React DOM зарегистрирует рендерер.
-// Иначе HMR remote выродится в перезагрузку страницы.
+// Список remote заранее неизвестен — получаем его и регистрируем контейнеры
+// в рантайме Module Federation. Сеть здесь не трогается: контейнер поднимется
+// при первом loadRemote, когда React отрендерит нужный lazy-компонент.
 //
-// Запрос идёт через queryClient.fetchQuery, а не голым fetch: результат
+// Регистрация должна пройти здесь, а не лениво внутри loadRemoteModule.
+// Проверено: если убрать её отсюда и полагаться на регистрацию в момент
+// рендера, HMR обоих remote перестаёт применяться — правка доезжает только
+// после ручной перезагрузки.
+//
+// Реестр берётся через queryClient.fetchQuery, а не голым fetch: результат
 // оседает в кэше, и useQuery в UI отрисует его сразу, без второго запроса.
 //
 // Здесь намеренно нет React-импортов: любой синхронный shared-модуль в точке
@@ -22,7 +25,8 @@ async function start() {
     })
     .catch(() => []);
 
-  await preloadRemotes(remotes);
+  registerRemoteContainers(remotes);
+
   await import('./bootstrap');
 }
 

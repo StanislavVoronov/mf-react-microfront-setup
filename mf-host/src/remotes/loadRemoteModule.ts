@@ -8,50 +8,41 @@ import type { RemoteDescriptor } from './registry';
 const registered = new Set<string>();
 
 /**
- * Регистрирует контейнер (один раз на имя) и достаёт из него модуль.
+ * Регистрирует контейнеры в рантайме Module Federation.
+ *
+ * Ничего не грузит: registerRemotes — это запись в реестре, сеть не трогается.
+ * Контейнер поднимется при первом loadRemote, то есть когда React отрендерит
+ * соответствующий lazy-компонент.
+ */
+export function registerRemoteContainers(remotes: RemoteDescriptor[]): void {
+  const fresh = remotes.filter((remote) => !registered.has(remote.name));
+
+  if (fresh.length === 0) {
+    return;
+  }
+
+  registerRemotes(fresh.map(({ name, entry }) => ({ name, entry })));
+
+  for (const remote of fresh) {
+    registered.add(remote.name);
+  }
+}
+
+/**
+ * Достаёт модуль из контейнера по его описанию.
  *
  * Универсальный загрузчик: ничего не знает про конкретные remote, работает
  * по параметрам из реестра.
  */
-export async function loadRemoteModule({
-  name,
-  entry,
-  module,
-}: RemoteDescriptor) {
-  if (!registered.has(name)) {
-    registerRemotes([{ name, entry }]);
-    registered.add(name);
-  }
+export async function loadRemoteModule(remote: RemoteDescriptor) {
+  registerRemoteContainers([remote]);
 
-  const moduleId = `${name}/${module}`;
+  const moduleId = `${remote.name}/${remote.module}`;
   const loaded = await loadRemote<{ default: ComponentType }>(moduleId);
 
   if (!loaded) {
-    throw new Error(`${moduleId} не найден в ${entry}`);
+    throw new Error(`${moduleId} не найден в ${remote.entry}`);
   }
 
   return loaded;
-}
-
-/**
- * Поднимает контейнеры до создания React-корня.
- *
- * В dev-сборке внутри контейнера едет собственный рантайм remote —
- * react-refresh и HMR-клиент. Он должен встать в глобальный хук раньше,
- * чем React DOM зарегистрирует рендерер, иначе HMR remote выродится
- * в перезагрузку страницы.
- *
- * Последовательно, а не Promise.all: при параллельной инициализации
- * контейнеры гонятся за share scope и второй remote успевает подтянуть
- * собственную копию React вместо общей.
- *
- * Ошибки глушим: недоступный remote не должен мешать хосту стартовать,
- * его покажет RemoteBoundary при рендере.
- */
-export async function preloadRemotes(
-  remotes: RemoteDescriptor[],
-): Promise<void> {
-  for (const remote of remotes) {
-    await loadRemoteModule(remote).catch(() => undefined);
-  }
 }
