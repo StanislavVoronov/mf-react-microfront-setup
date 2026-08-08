@@ -1,5 +1,6 @@
 import { preloadRemotes } from './remotes/loadRemoteModule';
 import { fetchRemotes } from './remotes/registry';
+import { queryClient, REMOTES_QUERY_KEY } from './queryClient';
 
 // Список remote заранее неизвестен — спрашиваем его у сервера, а уже потом
 // поднимаем контейнеры. Всё это до react-dom: в dev-сборке внутри контейнера
@@ -7,15 +8,19 @@ import { fetchRemotes } from './remotes/registry';
 // встать в глобальный хук раньше, чем React DOM зарегистрирует рендерер.
 // Иначе HMR remote выродится в перезагрузку страницы.
 //
-// В UI список запрашивается ещё раз — уже через TanStack Query, которому
-// принадлежит состояние загрузки и ошибок. Второй запрос уходит в тот же
-// локальный эндпоинт и стоит копейки.
+// Запрос идёт через queryClient.fetchQuery, а не голым fetch: результат
+// оседает в кэше, и useQuery в UI отрисует его сразу, без второго запроса.
 //
 // Здесь намеренно нет React-импортов: любой синхронный shared-модуль в точке
 // входа ломает Module Federation. ./bootstrap грузится динамически — это и есть
 // обязательная асинхронная граница.
 async function start() {
-  const remotes = await fetchRemotes().catch(() => []);
+  const remotes = await queryClient
+    .fetchQuery({
+      queryKey: REMOTES_QUERY_KEY,
+      queryFn: ({ signal }) => fetchRemotes(signal),
+    })
+    .catch(() => []);
 
   await preloadRemotes(remotes);
   await import('./bootstrap');

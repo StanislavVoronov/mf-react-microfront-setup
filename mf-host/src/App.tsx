@@ -1,24 +1,13 @@
-import {
-  QueryClient,
-  QueryClientProvider,
-  useQuery,
-} from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { queryClient, REMOTES_QUERY_KEY } from './queryClient';
 import { RemoteModule } from './remotes/RemoteModule';
 import { fetchRemotes } from './remotes/registry';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
-
 function RemoteList() {
+  // Тот же ключ, что и в точке входа: данные уже лежат в кэше, повторного
+  // запроса не будет.
   const { data, error, isPending, refetch } = useQuery({
-    queryKey: ['remotes'],
+    queryKey: REMOTES_QUERY_KEY,
     queryFn: ({ signal }) => fetchRemotes(signal),
   });
 

@@ -27,6 +27,11 @@ export default defineConfig({
         'react-dom/': { singleton: true, requiredVersion: false },
         // Хост сам ходит в react-query за списком remote, поэтому шарит его
         // дальше: mf-remote-2 получит тот же инстанс, а не свою копию.
+        //
+        // @tanstack/query-core намеренно НЕ шарится: точка входа импортирует
+        // его синхронно (там создаётся QueryClient), а синхронный shared-модуль
+        // в entry ломает асинхронную границу — loadShareSync failed.
+        // Ядро приезжает внутри shared-копии react-query, инстанс всё равно один.
         '@tanstack/react-query': { singleton: true, requiredVersion: false },
       },
       dts: false,

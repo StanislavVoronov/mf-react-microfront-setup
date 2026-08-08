@@ -1,12 +1,5 @@
 import { useState } from 'react';
-import { MfRemote1Widget } from './remotes/MfRemote1Widget';
-import { preloadRemotes } from './remotes/preload';
 import './App.css';
-
-// Вложенные контейнеры поднимаем на верхнем уровне модуля — до того, как хост
-// создаст React-корень. Хост ждёт этот await, потому что грузит mf_remote/App
-// через loadRemote().
-await preloadRemotes();
 
 export default function App() {
   const [count, setCount] = useState(0);
@@ -25,8 +18,6 @@ export default function App() {
       >
         count: {count}
       </button>
-
-      <MfRemote1Widget />
     </section>
   );
 }

@@ -5,19 +5,21 @@ Module Federation 2.0 + Rsbuild + React. Пять независимых пап�
 
 | Папка         | Что это                                                        | Порт |
 | ------------- | -------------------------------------------------------------- | ---- |
-| `mf-remote`   | MF 2.0 remote; сам является host для `mf-remote-1`              | 5001 |
+| `mf-remote`   | MF 2.0 remote со счётчиком                                      | 5001 |
 | `mf-host`     | Host, `createRoot`, автогенерация `index.html`                  | 5002 |
 | `mf-bus`      | express: раздаёт сборку `mf-host` и проксирует remote           | 5003 |
-| `mf-remote-1` | Вложенный remote, его грузит `mf-remote`                        | 5004 |
+| `mf-remote-1` | Remote-виджет; сейчас никем не подключён, порт занят под него   | 5004 |
 | `mf-remote-2` | Remote с TanStack Query и прогнозом погоды по 10 городам        | 5005 |
 
 Порты зашиты в конфиги, `strictPort: true` — молча съехать на соседний нельзя.
 
 ```
 mf-host
-  ├── mf-remote        →  mf-remote-1
+  ├── mf-remote
   └── mf-remote-2
 ```
+
+Оба контейнера подключает хост, вложенности сейчас нет.
 
 ## Установка
 
@@ -65,9 +67,11 @@ cd mf-bus      && npm start
 
 ### Хост не знает remote заранее
 
-Список приходит в рантайме из `GET /api/remotes`: в разработке его отдаёт
-dev-сервер `mf-host` через `server.setup`, в проде — `mf-bus`. В коде хоста
-нет ни одного имени контейнера.
+Список приходит в рантайме. Сейчас его отдаёт заглушка в
+[registry.ts](mf-host/src/remotes/registry.ts); рядом лежит готовый эндпоинт
+`GET /api/remotes` с ровно таким же JSON — в разработке его поднимает
+dev-сервер `mf-host` через `server.setup`, в проде `mf-bus`. Переключение —
+одна функция. Ни в `rsbuild.config.ts`, ни в JSX имён контейнеров нет.
 
 ```json
 [
@@ -79,8 +83,8 @@ dev-сервер `mf-host` через `server.setup`, в проде — `mf-bus`
 Реестр живёт рядом с инфраструктурой — [mf-host/remotes.ts](mf-host/remotes.ts)
 и [mf-bus/remotes.js](mf-bus/remotes.js). Из него же строится прокси, так что
 адрес remote описан ровно один раз. Записи без `module` проксируются, но хосту
-не отдаются: их подключает не он, а другой remote (так `mf-remote` подключает
-`mf-remote-1`).
+не отдаются — так сейчас лежит `mf-remote-1`: его дев-сервер доступен, но
+подключать его некому.
 
 ```
 mf-host/src/remotes/
@@ -138,14 +142,21 @@ react-refresh должен встать в глобальный хук React **�
 зарегистрирует рендерер. Иначе HMR вырождается в перезагрузку страницы. Отсюда
 два места:
 
-- [mf-host/src/index.tsx](mf-host/src/index.tsx) сначала запрашивает реестр
-  обычным `fetch`, поднимает контейнеры и только потом динамически импортирует
-  `./bootstrap` с `createRoot`. Динамический импорт — ещё и обязательная для
-  Module Federation асинхронная граница. В UI список запрашивается ещё раз,
-  уже через TanStack Query: второй запрос уходит в тот же локальный эндпоинт.
-- [mf-remote/src/App.tsx](mf-remote/src/App.tsx) поднимает вложенный контейнер
-  через top-level `await`. Хост ждёт этот await, потому что грузит
-  `mf_remote/App` через `loadRemote()`.
+[mf-host/src/index.tsx](mf-host/src/index.tsx) сначала получает реестр, потом
+поднимает контейнеры и только потом динамически импортирует `./bootstrap`
+с `createRoot`. Динамический импорт — ещё и обязательная для Module Federation
+асинхронная граница.
+
+Реестр берётся через `queryClient.fetchQuery` из
+[queryClient.ts](mf-host/src/queryClient.ts): клиент создан из
+`@tanstack/query-core` — это ядро TanStack Query **без React**, поэтому его
+можно импортировать в entry. Результат оседает в кэше, и `useQuery` в UI
+отрисует его сразу, без второго запроса.
+
+По той же причине `@tanstack/query-core` не попал в `shared`: точка входа
+импортирует его синхронно, а синхронный shared-модуль в entry ломает
+асинхронную границу (`loadShareSync failed`). Ядро приезжает внутри
+shared-копии `@tanstack/react-query`, так что инстанс всё равно один.
 
 Контейнеры поднимаются **последовательно**, а не через `Promise.all`: при
 параллельной инициализации они гонятся за share scope, и второй remote успевает
