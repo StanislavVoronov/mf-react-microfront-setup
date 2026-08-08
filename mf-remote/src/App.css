@@ -1,0 +1,48 @@
+.remote-app {
+  border: 1px dashed #7c5cff;
+  border-radius: 12px;
+  padding: 20px 24px;
+  background: #f7f5ff;
+}
+
+.remote-app__title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: #4b2fd6;
+}
+
+.remote-app__hint {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: #555;
+}
+
+.remote-app__button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 15px;
+  color: #fff;
+  background: #7c5cff;
+  cursor: pointer;
+}
+
+.remote-app__button:hover {
+  background: #6a49f2;
+}
+
+.remote-app__error {
+  margin-top: 16px;
+  border: 1px solid #f3b1b1;
+  border-radius: 10px;
+  padding: 12px 16px;
+  background: #fff5f5;
+  color: #8c2f2f;
+  font-size: 13px;
+}
+
+.remote-app__error pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+}

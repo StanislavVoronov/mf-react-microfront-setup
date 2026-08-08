@@ -1,0 +1,33 @@
+.widget {
+  margin-top: 16px;
+  border: 1px dashed #0f9d8f;
+  border-radius: 10px;
+  padding: 16px 20px;
+  background: #f0fbf9;
+}
+
+.widget__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  color: #0b7c71;
+}
+
+.widget__hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #555;
+}
+
+.widget__button {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 14px;
+  color: #fff;
+  background: green;
+  cursor: pointer;
+}
+
+.widget__button:hover {
+  background: #0b7c71;
+}

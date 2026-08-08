@@ -1,0 +1,25 @@
+{
+  "name": "mf-host",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "build:dev": "MF_STATIC_BUILD=true rsbuild build --mode development",
+    "preview": "rsbuild preview"
+  },
+  "dependencies": {
+    "@module-federation/enhanced": "^2.8.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@module-federation/rsbuild-plugin": "^2.8.2",
+    "@rsbuild/core": "^2.1.10",
+    "@rsbuild/plugin-react": "^2.1.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "typescript": "^5.9.3"
+  }
+}

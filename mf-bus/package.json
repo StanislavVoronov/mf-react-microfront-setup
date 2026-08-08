@@ -1,0 +1,16 @@
+{
+  "name": "mf-bus",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "build:host": "npm --prefix ../mf-host run build:dev",
+    "build:host:prod": "npm --prefix ../mf-host run build",
+    "dev": "npm run build:host && node server.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "http-proxy-middleware": "^4.2.0"
+  }
+}

@@ -1,0 +1,49 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f4f6fb;
+  color: #1c1f26;
+}
+
+.host {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.host__header {
+  margin-bottom: 32px;
+}
+
+.host__title {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+.host__subtitle {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.host__status {
+  color: #6b7280;
+}
+
+.host__error {
+  border: 1px solid #f3b1b1;
+  border-radius: 12px;
+  padding: 16px 20px;
+  background: #fff5f5;
+  color: #8c2f2f;
+}
+
+.host__error pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
