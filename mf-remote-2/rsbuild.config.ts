@@ -21,11 +21,6 @@ export default defineConfig({
         'react/': { singleton: true, requiredVersion: false },
         'react-dom': { singleton: true, requiredVersion: false },
         'react-dom/': { singleton: true, requiredVersion: false },
-        // Хост про react-query не знает и не поставляет его — этот remote
-        // приносит библиотеку с собой. singleton нужен на случай, если
-        // react-query появится и у другого участника: два инстанса
-        // QueryClient-контекста не увидят друг друга.
-        '@tanstack/react-query': { singleton: true, requiredVersion: false },
       },
       dts: false,
     }),
@@ -43,9 +38,6 @@ export default defineConfig({
 
   dev: {
     assetPrefix: `${BASE}/`,
-    client: {
-      path: `${BASE}/rsbuild-hmr`,
-    },
   },
 
   server: {

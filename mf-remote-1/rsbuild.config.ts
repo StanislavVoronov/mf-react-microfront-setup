@@ -38,9 +38,6 @@ export default defineConfig({
 
   dev: {
     assetPrefix: `${BASE}/`,
-    client: {
-      path: `${BASE}/rsbuild-hmr`,
-    },
   },
 
   server: {

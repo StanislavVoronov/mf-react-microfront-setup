@@ -48,11 +48,6 @@ export default defineConfig({
 
   dev: {
     assetPrefix: `${BASE}/`,
-    // Путь ws совпадает с server.base, чтобы прокси потребителя мог
-    // пробросить его без переписывания.
-    client: {
-      path: `${BASE}/rsbuild-hmr`,
-    },
   },
 
   server: {
