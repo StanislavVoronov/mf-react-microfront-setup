@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MfRemote1Widget } from './remotes/MfRemote1Widget';
 import './App.css';
 
 export default function App() {
@@ -18,6 +19,8 @@ export default function App() {
       >
         count: {count}
       </button>
+
+      <MfRemote1Widget />
     </section>
   );
 }

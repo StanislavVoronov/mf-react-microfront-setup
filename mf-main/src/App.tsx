@@ -1,7 +1,7 @@
 import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { queryClient, REMOTES_QUERY_KEY } from './queryClient';
 import { RemoteModule } from './remotes/RemoteModule';
-import { fetchRemotes } from './remotes/registry';
+import { fetchRemotes, renderable } from './remotes/registry';
 
 function RemoteList() {
   // Тот же ключ, что и в точке входа: данные уже лежат в кэше, повторного
@@ -27,7 +27,11 @@ function RemoteList() {
     );
   }
 
-  if (data.length === 0) {
+  // Показываем только те, что приложение рисует само. Остальные из реестра
+  // нужны ради регистрации и прогрева — их рендерит кто-то другой.
+  const visible = renderable(data);
+
+  if (visible.length === 0) {
     return <p className="host__status">Сервер не отдал ни одного remote.</p>;
   }
 
@@ -37,7 +41,7 @@ function RemoteList() {
         Доступные remote: {data.map((remote) => remote.name).join(', ')}
       </p>
 
-      {data.map((remote) => (
+      {visible.map((remote) => (
         <RemoteModule key={remote.name} remote={remote} />
       ))}
     </>

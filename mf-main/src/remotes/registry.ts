@@ -1,7 +1,7 @@
 /**
  * Описание одного remote.
  *
- * Хост не знает контейнеры на этапе сборки: ни в rsbuild.config.ts, ни в JSX
+ * Контейнеры не известны на этапе сборки: ни в rsbuild.config.ts, ни в JSX
  * их нет. Список приходит в рантайме — сейчас из заглушки ниже.
  */
 export type RemoteDescriptor = {
@@ -13,6 +13,17 @@ export type RemoteDescriptor = {
   module: string;
   /** Подпись для UI. */
   title?: string;
+  /**
+   * Рендерить ли модуль на верхнем уровне приложения.
+   *
+   * `false` — контейнер только регистрируется и прогревается, а рисует его
+   * кто-то другой. Так подключён mf-remote-1: его рендерит mf-remote, но
+   * попасть в реестр он обязан, иначе прогрев случится позже react-dom
+   * и HMR вложенного remote перестанет применяться.
+   *
+   * Не указан — считаем `true`.
+   */
+  render?: boolean;
 };
 
 export const REMOTES_URL = '/api/remotes';
@@ -26,12 +37,27 @@ const STUB: RemoteDescriptor[] = [
     title: 'mf-remote',
   },
   {
+    name: 'mf_remote_1',
+    entry: '/mf-remote-1/mf-manifest.json',
+    module: 'Widget',
+    title: 'mf-remote-1',
+    // Рисует его mf-remote, здесь нужен только прогрев.
+    render: false,
+  },
+  {
     name: 'mf_remote_2',
     entry: '/mf-remote-2/mf-manifest.json',
     module: 'Weather',
     title: 'Погода',
   },
 ];
+
+/** Только те, что приложение показывает само. */
+export function renderable(
+  remotes: RemoteDescriptor[],
+): RemoteDescriptor[] {
+  return remotes.filter((remote) => remote.render !== false);
+}
 
 /**
  * Возвращает список доступных remote.
