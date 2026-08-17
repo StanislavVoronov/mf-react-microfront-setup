@@ -14,12 +14,11 @@ export default defineConfig({
     pluginModuleFederation({
       name: 'mf_main',
       exposes: {
-        // Точка монтирования приложения. Хост зовёт её без аргументов;
-        // и DOM-узел, и createRoot живут здесь, а не в хосте.
-        './mount': './src/mount.ts',
+        // mf-main отдаёт только React-компонент приложения. createRoot живёт
+        // в host/bus, которые предварительно регистрируют контейнеры.
+        '.': './src/App.tsx',
       },
-      // main — поставщик React для остальных remote: хост про React не знает
-      // вообще. Слэш в конце даёт префиксный шеринг (react/jsx-runtime,
+      // Слэш в конце даёт префиксный шеринг (react/jsx-runtime,
       // react-dom/client).
       shared: {
         react: { singleton: true, requiredVersion: false },
@@ -32,7 +31,7 @@ export default defineConfig({
   ],
 
   // Единственная точка входа нужна только сборщику: приложение не монтирует
-  // себя само, его запускает хост через exposes './mount'.
+  // себя само, его запускает host/bus через exposes '.'.
   source: {
     entry: {
       index: './src/index.ts',
@@ -45,10 +44,8 @@ export default defineConfig({
 
   dev: {
     assetPrefix: `${BASE}/`,
-    // Ленивая компиляция динамических импортов (по умолчанию включена)
-    // просит dev-сервер дособрать чанк по своему служебному пути, который
-    // не проходит через прокси потребителя, — получаем HTTP 404.
-    // Здесь ./render грузится динамически, поэтому выключаем.
+    // Держим поведение dev-сборки предсказуемым при загрузке через прокси
+    // mf-host/mf-bus.
     lazyCompilation: false,
   },
 
@@ -61,5 +58,12 @@ export default defineConfig({
 
   output: {
     assetPrefix: `${BASE}/`,
+    // Собранный контейнер кладём прямо в статику mf-bus. Оттуда же оболочка
+    // забирает mf-manifest.json для инициализации mf_main, поэтому копировать
+    // сборку куда-то ещё не нужно, а dev-сервер на 5006 становится
+    // необязательным: путь /mf-main/ в браузере не меняется.
+    distPath: {
+      root: `../mf-bus/public${BASE}`,
+    },
   },
 });

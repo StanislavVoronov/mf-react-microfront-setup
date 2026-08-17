@@ -1,5 +1,5 @@
 // Технический entry для Rsbuild.
 //
-// Приложение не монтирует себя само: нет index.html, а createRoot спрятан
-// за exposes './mount' — его вызывает хост, передавая DOM-контейнер.
+// mf-main больше не создаёт React root. Он отдаёт приложение как remote-модуль,
+// а bootstrap, createRoot и порядок регистрации контейнеров живут в mf-host.
 export {};

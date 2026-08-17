@@ -6,25 +6,29 @@ Module Federation 2.0 + Rsbuild + React. Шесть независимых па�
 | Папка         | Что это                                                        | Порт |
 | ------------- | -------------------------------------------------------------- | ---- |
 | `mf-remote`   | Remote со счётчиком; сам подключает `mf-remote-1`               | 5001 |
-| `mf-host`     | Тонкая оболочка: грузит `mf-main` и больше ничего не знает      | 5002 |
-| `mf-bus`      | express: раздаёт сборку `mf-host` и проксирует remote           | 5003 |
+| `mf-host`     | Отдельная host-оболочка для запуска через dev-сервер            | 5002 |
+| `mf-bus`      | Оболочка: bootstrap, stubs, прокси и раздача собранных remote   | 5003 |
 | `mf-remote-1` | Remote-виджет, его рендерит `mf-remote`                         | 5004 |
 | `mf-remote-2` | Remote с TanStack Query и прогнозом погоды по 10 городам        | 5005 |
-| `mf-main`     | Само приложение: `createRoot`, реестр remote, react-query       | 5006 |
+| `mf-main`     | Само приложение как remote-компонент, UI реестра, react-query   | 5006 |
 
 Порты зашиты в конфиги, `strictPort: true` — молча съехать на соседний нельзя.
 
 ```
-mf-host (оболочка, только registerRemotes + loadRemote)
-  └── mf-main (createRoot, реестр)
+mf-bus (fetch stubs → registerRemotes → mf_main → createRoot)
+  └── mf-main (default remote-компонент)
         ├── mf-remote  →  mf-remote-1
         └── mf-remote-2
 ```
 
-Смысл разделения: `mf-host` собирается в статику один раз и дальше не нужен как
-процесс. Живая разработка идёт в `mf-main` и remote — все они dev-серверы с HMR.
-Хост трогается, только если меняется сама оболочка (30 строк, 364 kB против
-1732 kB до разделения).
+Основной вход — `mf-bus`, и это обычный `rsbuild dev`: своего сервера у него
+нет. Реестр stubs, прокси на remote и раздача уже собранных контейнеров описаны
+в [mf-bus/rsbuild.config.ts](mf-bus/rsbuild.config.ts) через `server.setup`,
+`server.proxy` и `server.publicDir`. Живая разработка идёт в `mf-main` и
+remote — все они dev-серверы с HMR.
+
+`mf-bus` существует только в dev: production-режима у него нет, собирать его
+нечем и незачем.
 
 ## Установка
 
@@ -34,34 +38,66 @@ for d in mf-remote mf-remote-1 mf-remote-2 mf-main mf-host mf-bus; do (cd $d && 
 
 ## Сценарий 1: разработка через mf-bus, хост выключен
 
-`mf-bus` отдаёт **собранный** `mf-host`, а правки в `mf-main` и любом remote
-прилетают на страницу без перезагрузки.
+Собирать `mf-bus` не нужно и нечем: `npm run dev` — это `rsbuild dev`.
+Правки в `mf-main` и любом remote прилетают на страницу без перезагрузки,
+правки в самой оболочке — тоже.
 
 ```bash
 cd mf-remote   && npm run dev   # 5001
 cd mf-remote-1 && npm run dev   # 5004
 cd mf-remote-2 && npm run dev   # 5005
 cd mf-main     && npm run dev   # 5006
-cd mf-bus      && npm run dev   # 5003: собрать хост и поднять раздачу
+cd mf-bus      && npm run dev   # 5003: rsbuild dev, сборки нет
 ```
 
-Открыть <http://localhost:5003>. Dev-сервер `mf-host` при этом не нужен вообще.
+Чтобы `mf-main` действительно поднимался с 5006, верните ему `target`
+в [mf-bus/src/remotes.ts](mf-bus/src/remotes.ts) — по умолчанию он раздаётся
+собранным (сценарий 1b).
+
+Открыть <http://localhost:5003>. Dev-сервер `mf-host` при этом не нужен.
+
+## Сценарий 1b: собранный mf-main через mf-bus
+
+`mf-main` можно не держать процессом. Он собирается прямо в статику оболочки —
+`mf-bus/public/mf-main` (`output.distPath` в
+[mf-main/rsbuild.config.ts](mf-main/rsbuild.config.ts)), — и `mf-bus` раздаёт
+контейнер оттуда: `server.publicDir` отдаёт папку с корня, а прокси на 5006
+в конфиге просто не появляется.
+
+```bash
+cd mf-main && npm run build:dev   # именно build:dev, см. ниже
+cd mf-bus  && npm run dev         # dev-сервер mf-main не нужен
+```
+
+Это и есть текущая раскладка по умолчанию: у `mf_main` в реестре нет `target`.
+
+Путь `/mf-main/` в браузере не меняется: он совпадает и с `output.assetPrefix`
+сборки, и с папкой внутри `public`, так что оболочка забирает оттуда
+`mf-manifest.json` для инициализации `mf_main`, ничего не зная о подмене.
+
+Режим переключается полем `target` в
+[mf-bus/src/remotes.ts](mf-bus/src/remotes.ts): есть адрес — контейнер
+проксируется на свой dev-сервер, нет — берётся собранным из `public/<prefix>`.
+У `mf_main` его нет, у остальных есть. Правило общее, так что из папки можно
+поднять любой remote.
+
+Порядок здесь не свободный: прокси в rsbuild отрабатывает **раньше** раздачи
+`public`, поэтому объявленный `target` всегда перебивает собранную папку —
+«собрано, значит из папки» само не получится.
+
+`build:dev`, а не `build`: оболочка в dev-режиме собирается в development,
+и её `react-dom` не сойдётся с production-копией React из `mf-main` — см. раздел
+про ограничение.
+
+HMR remote при этом продолжает работать: их сокеты идут напрямую на их
+dev-серверы и от режима `mf-main` не зависят. А вот сам `mf-main` из папки,
+конечно, замирает — чтобы править его живьём, вернитесь к сценарию 1.
+Пересобрали его — страница перезагрузится сама: `publicDir.watch` включён.
 
 ## Сценарий 2: с dev-сервером хоста
 
 Всё то же самое плюс `cd mf-host && npm run dev` на 5002 — пригодится, если
 правится сама оболочка.
-
-## Сценарий 3: production
-
-```bash
-cd mf-remote-1 && npm run build && npm run preview
-cd mf-remote-2 && npm run build && npm run preview
-cd mf-remote   && npm run build && npm run preview
-cd mf-main     && npm run build && npm run preview
-cd mf-host     && npm run build
-cd mf-bus      && npm start
-```
 
 ## Как это устроено
 
@@ -72,27 +108,31 @@ cd mf-bus      && npm start
 технический entry для сборщика. Наружу торчит только то, что перечислено
 в `exposes`. По корню их порта отдаётся 404 — это контейнеры, а не страницы.
 
-### Хост — только оболочка
+### mf-bus — bootstrap приложения
 
-[mf-host/src/index.ts](mf-host/src/index.ts) целиком: зарегистрировать один
-контейнер, загрузить `mf_main/mount` и вызвать его. Ни React, ни JSX, ни DOM,
-ни знания про остальные remote — `pluginReact` и `shared` в его конфиге пустые.
+[mf-bus/src/index.ts](mf-bus/src/index.ts) делает ранний bootstrap:
+запрашивает stubs через `GET /api/remotes`, регистрирует эти контейнеры вместе
+с `mf_main`, загружает `mf_main`, а уже потом динамически импортирует
+`react` и `react-dom/client` для `createRoot`.
 
 ```ts
-registerRemotes([{ name: 'mf_main', entry: '/mf-main/mf-manifest.json' }]);
-const mounted = await loadRemote('mf_main/mount');
-await mounted.default();
+const stubs = await fetchStubs();
+registerRemotes([MAIN_REMOTE, ...stubs]);
+const app = await loadRemote('mf_main');
+const React = await import('react');
+const ReactDOM = await import('react-dom/client');
+ReactDOM.createRoot(root).render(/* mf_main */);
 ```
 
-`#root` ищет уже `mf-main` — контейнер ему не передаётся.
+React и ReactDOM теперь шарятся из `mf-bus`, поэтому в его federation-конфиге
+есть `pluginReact()` и singleton `shared` для `react`, `react/`, `react-dom`,
+`react-dom/`.
 
 ### Приложение не знает remote заранее
 
-Список приходит в рантайме. Сейчас его отдаёт заглушка в
-[mf-main/src/remotes/registry.ts](mf-main/src/remotes/registry.ts); готовый
-эндпоинт `GET /api/remotes` с ровно таким же JSON есть у `mf-bus`.
-Переключение — одна функция. Ни в `rsbuild.config.ts`, ни в JSX имён
-контейнеров нет.
+Список дочерних remote запрашивает `mf-bus` до React bootstrap и затем повторно
+использует `mf-main` в UI: `GET /api/remotes`. `mf_main` в этот список не
+входит: browser entry `mf-bus` добавляет его напрямую как `MAIN_REMOTE`.
 
 ```json
 [
@@ -103,55 +143,56 @@ await mounted.default();
 ```
 
 Признак `render: false` разделяет две роли реестра. Регистрация и прогрев
-касаются **всех** записей, а рисует приложение только те, у кого `render`
-не выключен. Так подключён `mf-remote-1`: рендерит его `mf-remote`, но в реестр
-он попасть обязан — иначе прогрев случится позже `react-dom` и HMR вложенного
-remote перестанет применяться.
+касаются **всех** записей, а UI `mf-main` показывает только те, у кого `render`
+не выключен. Поэтому `mf-remote-1` есть в реестре с `render: false`: его
+рендерит `mf-remote`.
 
-На стороне `mf-bus` реестр живёт в [mf-bus/remotes.js](mf-bus/remotes.js) —
-из него же строится прокси, так что адрес remote описан там один раз.
+На стороне `mf-bus` реестр живёт в [mf-bus/src/remotes.ts](mf-bus/src/remotes.ts).
+Его импортирует `rsbuild.config.ts`: из того же списка строится и ответ
+`/api/remotes`, и `server.proxy`, так что адрес remote описан один раз.
 
 ```
 mf-main/src/
-  mount.ts             exposes './mount': реестр, регистрация, прогрев
-  render.tsx           createRoot — грузится динамически, последним шагом
+  App.tsx              exposes '.': приложение без createRoot
   remotes/registry.ts  тип RemoteDescriptor + fetchRemotes()
-  remotes/loadRemoteModule.ts  универсальный загрузчик по параметрам
-  remotes/RemoteModule.tsx     компонент: lazy + Suspense + RemoteBoundary
+  remotes/RemoteModule.tsx     lazy + registerRemotes + Suspense + RemoteBoundary
 ```
 
-Загрузчик ничего не знает про конкретные remote:
+Компонент remote ничего не знает про конкретные контейнеры заранее:
 
 ```ts
-const Component = lazy(() => loadRemoteModule({ name, entry, module }));
+registerRemotes([{ name: remote.name, entry: remote.entry }]);
+const Component = lazy(() => loadRemote(`${remote.name}/${remote.module}`));
 ```
 
-Он регистрирует контейнер один раз на имя и достаёт из него `${name}/${module}`.
+Он достаёт из контейнера `${name}/${module}` по описанию из реестра.
 Список в UI тянет TanStack Query — ему принадлежит состояние загрузки, ошибок
 и кнопка «Повторить».
 
-`registry.ts`, `loadRemoteModule.ts` и `mount.ts` лежат в `.ts` **без
-React-импортов**: любой синхронный shared-модуль на этом пути ломает Module
-Federation. `lazy()` живёт внутри компонента через ленивый инициализатор
+`registry.ts` лежит в `.ts` **без React-импортов**: любой синхронный
+shared-модуль на этом пути ломает Module Federation. `lazy()` живёт внутри
+компонента через ленивый инициализатор
 `useState`: голый `const` в теле пересоздавал бы компонент на каждом рендере
 и перемонтировал remote.
 
-В `mf-main` выключена `dev.lazyCompilation`: динамический `import('./render')`
-заставлял dev-сервер дособирать чанк по служебному пути, который не проходит
-через прокси потребителя — падало с `HTTP 404`.
+В `mf-main` оставлена выключенной `dev.lazyCompilation`, чтобы загрузка remote
+через прокси `mf-host`/`mf-bus` не упиралась в служебные lazy-compile URL.
 
 ### Адресов remote в коде нет — только прокси
 
 В коде лежат относительные пути (`/mf-main/mf-manifest.json`). Реальные адреса
-живут в двух местах: `server.proxy` у dev-сервера `mf-host` и `REMOTES`
-в [mf-bus/remotes.js](mf-bus/remotes.js). Каждый remote отдаёт себя под тем же
+живут в `REMOTES` ([mf-bus/src/remotes.ts](mf-bus/src/remotes.ts)) и в
+`server.proxy` у dev-сервера `mf-host`. Каждый remote отдаёт себя под тем же
 префиксом (`server.base` в его конфиге), поэтому прокси работает без
-`pathRewrite`.
+`pathRewrite`. Тот же префикс служит и именем папки в `mf-bus/public`, когда
+контейнер раздаётся собранным.
 
-Регистрация контейнеров — в рантайме, `remotes` в конфигах пустые:
+`mf-bus` регистрирует `mf_main` и stubs до `createRoot`; `mf-main` при рендере
+не регистрирует повторно то, что уже есть в текущем runtime:
 
 ```ts
-registerRemotes([{ name: NAME, entry: ENTRY }]);
+registerRemotes([{ name: 'mf_main', entry: '/mf-main/mf-manifest.json' }]);
+registerRemotes(stubs.map(({ name, entry }) => ({ name, entry })));
 const module = await loadRemote(`${NAME}/App`);
 ```
 
@@ -171,27 +212,20 @@ WebSocket не ограничен CORS, поэтому это работает.
 резолвером `dev.client.webSocketUrlResolver`, который подменяет origin
 на адрес страницы.
 
-### Порядок в mount() важен
+### Порядок bootstrap важен
 
-[mf-main/src/mount.ts](mf-main/src/mount.ts) делает три шага строго по порядку:
-получить реестр → зарегистрировать и прогреть контейнеры → динамически
-импортировать `./render` с `createRoot`. Динамический импорт — ещё и
-обязательная для Module Federation асинхронная граница: shared-модули
-резолвятся асинхронно.
+[mf-bus/src/index.ts](mf-bus/src/index.ts) делает шаги строго по порядку:
+получить stubs → зарегистрировать `mf_main` и stubs → загрузить `mf_main` →
+динамически импортировать React/ReactDOM → `createRoot`.
+Динамический импорт — ещё и обязательная для Module Federation асинхронная
+граница: shared-модули резолвятся асинхронно.
 
-Регистрация обязана отработать **раньше**, чем выполнится `react-dom`.
-Проверено экспериментально: если внести `createRoot` прямо в `mount.ts`
-(статический импорт `react-dom/client` поднимется наверх и выполнится до тела
-функции), приложение соберётся и отрисуется, но HMR всех трёх remote
-перестанет применяться — правка доезжает только после ручной перезагрузки.
-Отдельный `render.tsx` за динамическим импортом существует ровно ради этого.
+Статического импорта `react-dom/client` в `index.ts` нет: `createRoot`
+создаётся в этом же entry, но сам ReactDOM загружается только после регистрации
+контейнеров.
 
-По той же причине `mf-remote-1` попадает в реестр с `render: false`: без
-записи в реестре его контейнер регистрировался бы уже из модуля `mf-remote`,
-то есть после `react-dom`, и HMR вложенного remote не работал бы.
-
-Реестр в `mount.ts` берётся обычным `fetch` — этот путь обязан оставаться
-свободным от React-импортов. TanStack Query подключается уже в UI
+Реестр дочерних remote берётся уже внутри `mf-main` обычным `fetch`.
+TanStack Query подключается в UI
 ([mf-main/src/App.tsx](mf-main/src/App.tsx)).
 
 ### React шарится с префиксом
@@ -200,8 +234,7 @@ WebSocket не ограничен CORS, поэтому это работает.
 конце добавляет к singleton'у `react/jsx-runtime` и `react-dom/client` — без
 этого remote утащит свою копию внутренностей React и сломает хуки.
 
-Поставщик React — `mf-main`, а не хост: хост про React не знает вообще,
-`shared` у него пустой.
+Поставщик React — `mf-bus`, потому что именно он создаёт React root.
 
 `@tanstack/react-query` в `shared` не входит: `mf-remote-2` приносит его с
 собой вместе со своим `QueryClient` и не рассчитывает, что провайдер даст хост.
@@ -209,17 +242,38 @@ WebSocket не ограничен CORS, поэтому это работает.
 ## Ограничение: dev-remote требует dev-сборки хоста
 
 Fast Refresh работает только с development-сборкой `react-dom`, а её на страницу
-поставляет `mf-main` как владелец singleton'а. Поэтому связка «production-сборка
+поставляет `mf-bus` как владелец singleton'а. Поэтому связка «production-сборка
 + dev-сервер remote» не заводится: dev-код remote дёргает
 `react/jsx-dev-runtime`, несовместимый с production-внутренностями React
 (`dispatcher.getOwner is not a function`).
 
-Отсюда два режима сборки хоста:
+Правило простое: **режим должен быть одинаковым у всех, кто участвует в
+singleton'е React**. Смешивать development и production нельзя ни в какую
+сторону.
 
-- `npm run build:dev` — development-сборка для раздачи из `mf-bus` рядом с
-  dev-серверами `mf-main` и remote.
-- `npm run build` — обычная production-сборка, работает с production-сборками
-  всех остальных.
+`npm run dev` у `mf-bus` — это development-сборка оболочки, поэтому рядом
+с ней всё остальное тоже должно быть development:
 
-Сам `mf-host` React не содержит, так что ограничение касается пары
-«`mf-main` + remote», а не оболочки.
+- remote — dev-серверами (обычный сценарий 1);
+- `mf-main` из папки — `npm run build:dev`, не `build`.
+
+Что бывает при рассинхроне, проверено на обеих комбинациях:
+
+| на странице | ошибка |
+| --- | --- |
+| dev remote + production React | `dispatcher.getOwner is not a function` |
+| dev `react-dom` (`mf-bus`) + production `react` (папка `mf-main`) | `Cannot read properties of undefined (reading 'current')` в `isConcurrentActEnvironment` |
+
+Поскольку у `mf-bus` production-режима нет вообще, второй половины правила
+здесь просто не бывает: на странице всё всегда development.
+
+## Грабли: Module Federation ломается под tsx
+
+Актуально, если решите вернуть `mf-bus` собственный node-сервер. `tsx`
+прогоняет зависимости через esbuild с `keepNames`, а плагин Module Federation
+вшивает свои рантайм-хелперы в бандл через `Function.toString()`. Обёртки
+`__name(...)` уезжают в браузер, где такой функции нет, и контейнер падает ещё
+до старта приложения: `ReferenceError: __name is not defined`. Лечится запуском
+на голом `node` (типы он снимает сам) — но проще не заводить свой сервер:
+`server.setup`, `server.proxy` и `server.publicDir` закрывают всё, ради чего он
+был нужен.

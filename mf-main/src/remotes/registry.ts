@@ -2,7 +2,7 @@
  * Описание одного remote.
  *
  * Контейнеры не известны на этапе сборки: ни в rsbuild.config.ts, ни в JSX
- * их нет. Список приходит в рантайме — сейчас из заглушки ниже.
+ * их нет. Список приходит в рантайме от mf-bus.
  */
 export type RemoteDescriptor = {
   /** Имя контейнера, совпадает с `name` в конфиге remote. */
@@ -28,30 +28,6 @@ export type RemoteDescriptor = {
 
 export const REMOTES_URL = '/api/remotes';
 
-/** Заглушка вместо ответа сервера. */
-const STUB: RemoteDescriptor[] = [
-  {
-    name: 'mf_remote',
-    entry: '/mf-remote/mf-manifest.json',
-    module: 'App',
-    title: 'mf-remote',
-  },
-  {
-    name: 'mf_remote_1',
-    entry: '/mf-remote-1/mf-manifest.json',
-    module: 'Widget',
-    title: 'mf-remote-1',
-    // Рисует его mf-remote, здесь нужен только прогрев.
-    render: false,
-  },
-  {
-    name: 'mf_remote_2',
-    entry: '/mf-remote-2/mf-manifest.json',
-    module: 'Weather',
-    title: 'Погода',
-  },
-];
-
 /** Только те, что приложение показывает само. */
 export function renderable(
   remotes: RemoteDescriptor[],
@@ -62,20 +38,15 @@ export function renderable(
 /**
  * Возвращает список доступных remote.
  *
- * Пока это заглушка. Реальный эндпоинт есть у mf-bus и отдаёт ровно такой же
- * JSON. Чтобы переключиться, достаточно вернуть тело функции:
- *
- * ```ts
- * const response = await fetch(REMOTES_URL, { signal });
- * if (!response.ok) throw new Error(`${REMOTES_URL} ответил ${response.status}`);
- * return (await response.json()) as RemoteDescriptor[];
- * ```
- *
  * Без React-импортов: функцию тянет точка входа, а любой синхронный
  * shared-модуль в entry ломает Module Federation.
  */
-export async function fetchRemotes(
-  _signal?: AbortSignal,
-): Promise<RemoteDescriptor[]> {
-  return STUB;
+export async function fetchRemotes(): Promise<RemoteDescriptor[]> {
+  const response = await fetch(REMOTES_URL);
+
+  if (!response.ok) {
+    throw new Error(`${REMOTES_URL} ответил ${response.status}`);
+  }
+
+  return (await response.json()) as RemoteDescriptor[];
 }

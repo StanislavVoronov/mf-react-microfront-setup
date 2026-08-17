@@ -1,18 +1,23 @@
 import { defineConfig } from '@rsbuild/core';
+import { pluginReact } from '@rsbuild/plugin-react';
 import { pluginModuleFederation } from '@module-federation/rsbuild-plugin';
 
 const PORT = 5002;
 
 export default defineConfig({
   plugins: [
-    // pluginReact не нужен: в хосте нет ни React, ни JSX. Он только
-    // регистрирует контейнер mf_main и отдаёт ему DOM-узел.
+    pluginReact(),
     pluginModuleFederation({
       name: 'mf_host',
-      // remotes здесь не объявляем: mf_main регистрируется в рантайме.
       remotes: {},
-      // shared пустой: React поставляет mf-main, хост про него не знает.
-      shared: {},
+      // React root живёт в host, поэтому host становится владельцем
+      // singleton'а для React и ReactDOM.
+      shared: {
+        react: { singleton: true, requiredVersion: false },
+        'react/': { singleton: true, requiredVersion: false },
+        'react-dom': { singleton: true, requiredVersion: false },
+        'react-dom/': { singleton: true, requiredVersion: false },
+      },
       dts: false,
     }),
   ],
@@ -30,6 +35,8 @@ export default defineConfig({
     // ws: true — через этот же прокси идут HMR-сокеты remote.
     // Пути не переписываем: remote сами живут под своим server.base.
     proxy: {
+      // Нужен не bootstrap host, а приложению mf-main после рендера.
+      '/api/': { target: 'http://localhost:5003', changeOrigin: true },
       '/mf-main/': { target: 'http://localhost:5006', ws: true },
       '/mf-remote/': { target: 'http://localhost:5001', ws: true },
       '/mf-remote-1/': { target: 'http://localhost:5004', ws: true },

@@ -1,31 +1,48 @@
 import {
-  registerRemotes,
   loadRemote,
+  registerRemotes,
 } from '@module-federation/enhanced/runtime';
+import type { ComponentType } from 'react';
 
-// Хост — тонкая оболочка. Он знает ровно один контейнер и ничего не знает
-// ни про React, ни про DOM, ни про остальные remote: всё это живёт в mf-main.
-const MAIN_NAME = 'mf_main';
+type RemoteComponentModule = {
+  default: ComponentType;
+};
 
-// Относительный путь: адрес и порт знает только прокси — dev-сервер
-// mf-host в разработке и mf-bus при раздаче сборки.
-const MAIN_ENTRY = '/mf-main/mf-manifest.json';
+type RemoteStub = {
+  name: string;
+  entry: string;
+};
 
-type MountModule = { default: () => Promise<void> };
+async function fetchStubs(): Promise<RemoteStub[]> {
+  const response = await fetch('/api/remotes');
 
-async function start() {
-  registerRemotes([{ name: MAIN_NAME, entry: MAIN_ENTRY }]);
-
-  const mounted = await loadRemote<MountModule>(`${MAIN_NAME}/mount`);
-
-  if (!mounted) {
-    throw new Error(`${MAIN_NAME}/mount не найден в ${MAIN_ENTRY}`);
+  if (!response.ok) {
+    throw new Error(`/api/remotes ответил ${response.status}`);
   }
 
-  await mounted.default();
+  return (await response.json()) as RemoteStub[];
 }
 
-start().catch((error) => {
+async function mountMain(): Promise<void> {
+  const stubs = await fetchStubs();
+
+  registerRemotes([
+    { name: 'mf_main', entry: '/mf-main/mf-manifest.json' },
+    ...stubs.map(({ name, entry }) => ({ name, entry })),
+  ]);
+
+  const main = await loadRemote<RemoteComponentModule>('mf_main');
+
+  if (!main) {
+    throw new Error('mf_main не найден');
+  }
+
+  const { render } = await import('./render');
+
+  render(main.default);
+}
+
+function renderStartupError(error: unknown): void {
   console.error('mf-host: не удалось запустить mf-main', error);
 
   const container = document.getElementById('root');
@@ -33,4 +50,6 @@ start().catch((error) => {
   if (container) {
     container.textContent = `mf-main недоступен: ${String(error)}`;
   }
-});
+}
+
+void mountMain().catch(renderStartupError);

@@ -1,6 +1,9 @@
 node_modules/
 dist/
 
+# сюда собираются контейнеры для раздачи через mf-bus
+mf-bus/public/
+
 *.log
 npm-debug.log*
 

@@ -8,7 +8,7 @@ function RemoteList() {
   // запроса не будет.
   const { data, error, isPending, refetch } = useQuery({
     queryKey: REMOTES_QUERY_KEY,
-    queryFn: ({ signal }) => fetchRemotes(signal),
+    queryFn: fetchRemotes,
   });
 
   if (isPending) {
@@ -64,3 +64,5 @@ export function App() {
     </QueryClientProvider>
   );
 }
+
+export default App;
