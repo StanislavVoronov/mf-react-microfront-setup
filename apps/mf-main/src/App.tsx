@@ -1,5 +1,6 @@
 import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { queryClient, REMOTES_QUERY_KEY } from './queryClient';
+import { MfRemoteHardcoded } from './remotes/MfRemoteHardcoded';
 import { RemoteModule } from './remotes/RemoteModule';
 import { fetchRemotes, renderable } from './remotes/registry';
 
@@ -58,6 +59,9 @@ export function App() {
             Module Federation 2.0 · Rsbuild · React · TanStack Query
           </p>
         </header>
+
+        {/* Зашит в код: реестра не ждёт, рисуется сразу. */}
+        <MfRemoteHardcoded />
 
         <RemoteList />
       </main>

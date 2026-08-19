@@ -1,0 +1,18 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    // Оболочка в сценарии 1b раздаёт mf-main из mf-bus/public, поэтому
+    // dev-серверы не стартуют, пока mf-main туда не собран.
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["mf-main#build:dev"]
+    },
+    "build": {
+      "outputs": ["dist/**", "../mf-bus/public/**"]
+    },
+    "build:dev": {
+      "outputs": ["dist/**", "../mf-bus/public/**"]
+    }
+  }
+}

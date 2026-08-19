@@ -2,7 +2,7 @@ node_modules/
 dist/
 
 # сюда собираются контейнеры для раздачи через mf-bus
-mf-bus/public/
+apps/mf-bus/public/
 
 *.log
 npm-debug.log*
@@ -13,3 +13,6 @@ npm-debug.log*
 
 # генерируется Module Federation
 @mf-types/
+
+# turbo
+.turbo/

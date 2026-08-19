@@ -1,16 +1,16 @@
 # module-federation-react-dev-local-setup
 
-Module Federation 2.0 + Rsbuild + React. Шесть независимых папок, у каждой свой
-`package.json` и `node_modules`.
+Module Federation 2.0 + Rsbuild + React. Монорепа на npm workspaces и Turborepo:
+шесть пакетов в `apps/*`, зависимости и `node_modules` — общие, в корне.
 
-| Папка         | Что это                                                        | Порт |
-| ------------- | -------------------------------------------------------------- | ---- |
-| `mf-remote`   | Remote со счётчиком; сам подключает `mf-remote-1`               | 5001 |
-| `mf-host`     | Отдельная host-оболочка для запуска через dev-сервер            | 5002 |
-| `mf-bus`      | Оболочка: bootstrap, stubs, прокси и раздача собранных remote   | 5003 |
-| `mf-remote-1` | Remote-виджет, его рендерит `mf-remote`                         | 5004 |
-| `mf-remote-2` | Remote с TanStack Query и прогнозом погоды по 10 городам        | 5005 |
-| `mf-main`     | Само приложение как remote-компонент, UI реестра, react-query   | 5006 |
+| Пакет | Что это | Порт |
+| --- | --- | --- |
+| `apps/mf-remote` | Remote со счётчиком; сам подключает `mf-remote-1` | 5001 |
+| `apps/mf-host` | Отдельная host-оболочка для запуска через dev-сервер | 5002 |
+| `apps/mf-bus` | Оболочка: bootstrap, stubs, прокси и раздача собранных remote | 5003 |
+| `apps/mf-remote-1` | Remote-виджет, его рендерит `mf-remote` | 5004 |
+| `apps/mf-remote-2` | Remote с TanStack Query и прогнозом погоды по 10 городам | 5005 |
+| `apps/mf-main` | Само приложение как remote-компонент, UI реестра, react-query | 5006 |
 
 Порты зашиты в конфиги, `strictPort: true` — молча съехать на соседний нельзя.
 
@@ -23,7 +23,7 @@ mf-bus (fetch stubs → registerRemotes → mf_main → createRoot)
 
 Основной вход — `mf-bus`, и это обычный `rsbuild dev`: своего сервера у него
 нет. Реестр stubs, прокси на remote и раздача уже собранных контейнеров описаны
-в [mf-bus/rsbuild.config.ts](mf-bus/rsbuild.config.ts) через `server.setup`,
+в [mf-bus/rsbuild.config.ts](apps/mf-bus/rsbuild.config.ts) через `server.setup`,
 `server.proxy` и `server.publicDir`. Живая разработка идёт в `mf-main` и
 remote — все они dev-серверы с HMR.
 
@@ -33,8 +33,12 @@ remote — все они dev-серверы с HMR.
 ## Установка
 
 ```bash
-for d in mf-remote mf-remote-1 mf-remote-2 mf-main mf-host mf-bus; do (cd $d && npm install); done
+npm install
 ```
+
+Один `package.json` в корне держит все зависимости, у пакетов остались только
+`name` и `scripts`. Установка тоже одна: npm поднимает единственную копию
+react, react-dom и rsbuild в корневой `node_modules`, у пакетов своих нет.
 
 ## Сценарий 1: разработка через mf-bus, хост выключен
 
@@ -43,15 +47,12 @@ for d in mf-remote mf-remote-1 mf-remote-2 mf-main mf-host mf-bus; do (cd $d && 
 правки в самой оболочке — тоже.
 
 ```bash
-cd mf-remote   && npm run dev   # 5001
-cd mf-remote-1 && npm run dev   # 5004
-cd mf-remote-2 && npm run dev   # 5005
-cd mf-main     && npm run dev   # 5006
-cd mf-bus      && npm run dev   # 5003: rsbuild dev, сборки нет
+npm run dev          # turbo run dev: все шесть пакетов разом
+npm run dev -w mf-main   # или поштучно, любой пакет по имени
 ```
 
 Чтобы `mf-main` действительно поднимался с 5006, верните ему `target`
-в [mf-bus/src/remotes.ts](mf-bus/src/remotes.ts) — по умолчанию он раздаётся
+в [mf-bus/src/remotes.ts](apps/mf-bus/src/remotes.ts) — по умолчанию он раздаётся
 собранным (сценарий 1b).
 
 Открыть <http://localhost:5003>. Dev-сервер `mf-host` при этом не нужен.
@@ -60,14 +61,18 @@ cd mf-bus      && npm run dev   # 5003: rsbuild dev, сборки нет
 
 `mf-main` можно не держать процессом. Он собирается прямо в статику оболочки —
 `mf-bus/public/mf-main` (`output.distPath` в
-[mf-main/rsbuild.config.ts](mf-main/rsbuild.config.ts)), — и `mf-bus` раздаёт
+[mf-main/rsbuild.config.ts](apps/mf-main/rsbuild.config.ts)), — и `mf-bus` раздаёт
 контейнер оттуда: `server.publicDir` отдаёт папку с корня, а прокси на 5006
 в конфиге просто не появляется.
 
 ```bash
-cd mf-main && npm run build:dev   # именно build:dev, см. ниже
-cd mf-bus  && npm run dev         # dev-сервер mf-main не нужен
+npx turbo run build:dev --filter=mf-main   # именно build:dev, см. ниже
+npm run dev -w mf-bus                      # dev-сервер mf-main не нужен
 ```
+
+Собирать вручную обычно не приходится: `dev` в [turbo.json](turbo.json) объявлен
+через `dependsOn: ["mf-main#build:dev"]`, поэтому `npm run dev` сам собирает
+`mf-main` в статику оболочки до старта серверов.
 
 Это и есть текущая раскладка по умолчанию: у `mf_main` в реестре нет `target`.
 
@@ -76,7 +81,7 @@ cd mf-bus  && npm run dev         # dev-сервер mf-main не нужен
 `mf-manifest.json` для инициализации `mf_main`, ничего не зная о подмене.
 
 Режим переключается полем `target` в
-[mf-bus/src/remotes.ts](mf-bus/src/remotes.ts): есть адрес — контейнер
+[mf-bus/src/remotes.ts](apps/mf-bus/src/remotes.ts): есть адрес — контейнер
 проксируется на свой dev-сервер, нет — берётся собранным из `public/<prefix>`.
 У `mf_main` его нет, у остальных есть. Правило общее, так что из папки можно
 поднять любой remote.
@@ -96,8 +101,49 @@ dev-серверы и от режима `mf-main` не зависят. А вот
 
 ## Сценарий 2: с dev-сервером хоста
 
-Всё то же самое плюс `cd mf-host && npm run dev` на 5002 — пригодится, если
+Всё то же самое плюс `npm run dev -w mf-host` на 5002 — пригодится, если
 правится сама оболочка.
+
+## Монорепа
+
+Workspaces описаны в корневом [package.json](package.json) как `apps/*`, задачи —
+в [turbo.json](turbo.json). Зависимости живут только в корне, у пакетов остались
+`name`, `type` и `scripts`, поэтому react, react-dom и rsbuild на диске в одном
+экземпляре. На Module Federation это не влияет: singleton всё равно собирается
+в рантайме через share scope, и в `__FEDERATION__` по-прежнему пять инстансов —
+по одному на контейнер.
+
+```jsonc
+"dev":       { "cache": false, "persistent": true, "dependsOn": ["mf-main#build:dev"] },
+"build":     { "outputs": ["dist/**", "../mf-bus/public/**"] },
+"build:dev": { "outputs": ["dist/**", "../mf-bus/public/**"] }
+```
+
+`dependsOn` здесь обязателен: без него `turbo run dev` поднимает `mf-bus` раньше,
+чем `mf-main` собран в его `public`, и страница падает с
+`#RUNTIME-003 Failed to get manifest`. Рёбер между пакетами нет — они не зависят
+друг от друга по npm, только по рантайму, — так что порядок задаётся руками.
+
+Выход сборки за пределы пакета (`../mf-bus/public/**`) turbo переживает: артефакт
+восстанавливается из кэша вместе с остальным (проверено — удалил папку, получил
+`FULL TURBO` и файлы на месте). Но rsbuild предупреждает, что не чистит dist вне
+корня пакета, так что старые чанки оттуда никто не удаляет.
+
+Три грабли, на которые стоит смотреть:
+
+- **`npm run build` в корне ломает сценарий 1b.** Он гоняет `build` у всех, в том
+  числе production-сборку `mf-main` — та ложится в `apps/mf-bus/public/mf-main`
+  поверх dev-сборки, и оболочка перестаёт заводиться (см. раздел про ограничение).
+  Лечится `npx turbo run build:dev --filter=mf-main`.
+- **`envMode: strict` — дефолт turbo 2.** До задачи долетают только переменные,
+  перечисленные в `env`/`globalEnv`/`passThroughEnv`. Если адреса remote или
+  `assetPrefix` придут из окружения, они молча окажутся пустыми, а кэш их
+  не заметит.
+- **Общий `node_modules` не спасает от расхождения версий.** Если у пакетов
+  разъедутся react или `@module-federation/enhanced`, в share scope появится
+  вторая запись. Проверка в консоли:
+  `Object.keys(__FEDERATION__.__INSTANCES__[0].shareScopeMap.default.react).length`
+  должно быть `1`.
 
 ## Как это устроено
 
@@ -110,7 +156,7 @@ dev-серверы и от режима `mf-main` не зависят. А вот
 
 ### mf-bus — bootstrap приложения
 
-[mf-bus/src/index.ts](mf-bus/src/index.ts) делает ранний bootstrap:
+[mf-bus/src/index.ts](apps/mf-bus/src/index.ts) делает ранний bootstrap:
 запрашивает stubs через `GET /api/remotes`, регистрирует эти контейнеры вместе
 с `mf_main`, загружает `mf_main`, а уже потом динамически импортирует
 `react` и `react-dom/client` для `createRoot`.
@@ -147,7 +193,7 @@ React и ReactDOM теперь шарятся из `mf-bus`, поэтому в �
 не выключен. Поэтому `mf-remote-1` есть в реестре с `render: false`: его
 рендерит `mf-remote`.
 
-На стороне `mf-bus` реестр живёт в [mf-bus/src/remotes.ts](mf-bus/src/remotes.ts).
+На стороне `mf-bus` реестр живёт в [mf-bus/src/remotes.ts](apps/mf-bus/src/remotes.ts).
 Его импортирует `rsbuild.config.ts`: из того же списка строится и ответ
 `/api/remotes`, и `server.proxy`, так что адрес remote описан один раз.
 
@@ -156,6 +202,7 @@ mf-main/src/
   App.tsx              exposes '.': приложение без createRoot
   remotes/registry.ts  тип RemoteDescriptor + fetchRemotes()
   remotes/RemoteModule.tsx     lazy + registerRemotes + Suspense + RemoteBoundary
+  remotes/MfRemoteHardcoded.tsx  то же самое, но контейнер зашит в код
 ```
 
 Компонент remote ничего не знает про конкретные контейнеры заранее:
@@ -175,13 +222,40 @@ shared-модуль на этом пути ломает Module Federation. `lazy
 `useState`: голый `const` в теле пересоздавал бы компонент на каждом рендере
 и перемонтировал remote.
 
+### Второй вариант: контейнер зашит в код
+
+[mf-main/src/remotes/MfRemoteHardcoded.tsx](apps/mf-main/src/remotes/MfRemoteHardcoded.tsx)
+подключает `mf_remote` мимо реестра: имя, манифест и ключ из `exposes` известны
+на этапе сборки, поэтому `registerRemotes()` и `lazy()` стоят прямо на уровне
+модуля, без `useState`. Реестр этот контейнер всё равно знает — с `render: false`,
+как и `mf-remote-1`: регистрация и прогрев касаются всех, а рисует его теперь
+не список, а зашитый компонент.
+
+Модуль вычисляется один раз, так что `lazy()` создаётся один раз: на обычных
+перерендерах разницы с вариантом через `useState` нет. Разница появляется на HMR
+самого этого файла — новый модуль даёт новый `lazy`, и remote монтируется заново.
+
+HMR проверен на живой странице (`mf-bus` + dev-серверы remote):
+
+| что правим | правка применилась | состояние remote |
+| --- | --- | --- |
+| `mf-remote/src/App.tsx` (сам remote) | да, без перезагрузки | счётчик и вложенный `ticks` целы |
+| `mf-main/src/App.tsx` (сосед по mf-main) | да | целы оба remote |
+| `mf-main/src/remotes/MfRemoteHardcoded.tsx` | да | зашитый remote перемонтирован, счётчик и `ticks` сброшены; remote из реестра цел |
+| `mf-main/src/remotes/RemoteModule.tsx` | да | remote из реестра перемонтирован, выбранный город сброшен; зашитый цел |
+
+То есть HMR работает в обоих вариантах, и Fast Refresh remote проходит сквозь
+зашитый `lazy` так же, как сквозь `lazy` из `useState`. Перемонтируется только
+тот remote, чей файл-обёртка в `mf-main` и правится, — `useState` от этого
+не спасает.
+
 В `mf-main` оставлена выключенной `dev.lazyCompilation`, чтобы загрузка remote
 через прокси `mf-host`/`mf-bus` не упиралась в служебные lazy-compile URL.
 
 ### Адресов remote в коде нет — только прокси
 
 В коде лежат относительные пути (`/mf-main/mf-manifest.json`). Реальные адреса
-живут в `REMOTES` ([mf-bus/src/remotes.ts](mf-bus/src/remotes.ts)) и в
+живут в `REMOTES` ([mf-bus/src/remotes.ts](apps/mf-bus/src/remotes.ts)) и в
 `server.proxy` у dev-сервера `mf-host`. Каждый remote отдаёт себя под тем же
 префиксом (`server.base` в его конфиге), поэтому прокси работает без
 `pathRewrite`. Тот же префикс служит и именем папки в `mf-bus/public`, когда
@@ -214,7 +288,7 @@ WebSocket не ограничен CORS, поэтому это работает.
 
 ### Порядок bootstrap важен
 
-[mf-bus/src/index.ts](mf-bus/src/index.ts) делает шаги строго по порядку:
+[mf-bus/src/index.ts](apps/mf-bus/src/index.ts) делает шаги строго по порядку:
 получить stubs → зарегистрировать `mf_main` и stubs → загрузить `mf_main` →
 динамически импортировать React/ReactDOM → `createRoot`.
 Динамический импорт — ещё и обязательная для Module Federation асинхронная
@@ -226,7 +300,7 @@ WebSocket не ограничен CORS, поэтому это работает.
 
 Реестр дочерних remote берётся уже внутри `mf-main` обычным `fetch`.
 TanStack Query подключается в UI
-([mf-main/src/App.tsx](mf-main/src/App.tsx)).
+([mf-main/src/App.tsx](apps/mf-main/src/App.tsx)).
 
 ### React шарится с префиксом
 

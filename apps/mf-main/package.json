@@ -1,0 +1,12 @@
+{
+  "name": "mf-main",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "build:dev": "rsbuild build --mode development",
+    "preview": "rsbuild preview"
+  }
+}

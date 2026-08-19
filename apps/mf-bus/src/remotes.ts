@@ -39,6 +39,9 @@ export const REMOTES: RemoteConfig[] = [
     target: 'http://localhost:5001',
     module: 'App',
     title: 'mf-remote',
+    // Рендерит его не список mf-main, а зашитый в код MfRemoteHardcoded.
+    // В реестре запись нужна ради регистрации и прогрева.
+    render: false,
   },
   {
     name: 'mf_remote_1',
